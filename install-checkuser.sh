@@ -185,7 +185,7 @@ SERVICE="${APP_NAME}.service"
 TUNNEL_SERVICE="${APP_NAME}-tunnel.service"
 PORT="2052"
 LOG="/var/log/${APP_NAME}-tunnel.log"
-GREEN=$'\033[1;32m'; RED=$'\033[1;31m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;36m'; WHITE=$'\033[1;37m'; GRAY=$'\033[0;90m'; NC=$'\033[0m'
+GREEN=$'\033[1;32m'; RED=$'\033[1;31m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;35m'; WHITE=$'\033[1;37m'; GRAY=$'\033[0;90m'; NC=$'\033[0m'
 link(){
   local l
   l=$(grep -Eo 'https://[^[:space:]]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tr -d '"' | tail -1 || true)
