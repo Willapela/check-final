@@ -132,6 +132,14 @@ install_tunnel(){
       rm -f "$deb"; cf=$(command -v cloudflared || true)
     fi
     rm -f "$deb"
+    if [[ -z "$cf" ]]; then
+      warn "Pacote cloudflared indisponível; usando binário direto..."
+      local cf_bin="/usr/local/bin/cloudflared"
+      if curl -fL --retry 3 -o "$cf_bin" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${cf_arch}"; then
+        chmod 0755 "$cf_bin"
+        cf="$cf_bin"
+      fi
+    fi
   fi
   if [[ -z "$cf" ]]; then
     warn "cloudflared não foi instalado; o CheckUser continua funcionando por IP:porta."
@@ -158,7 +166,14 @@ EOF
   systemctl daemon-reload
   systemctl enable "$TUNNEL_SERVICE" >/dev/null
   systemctl restart "$TUNNEL_SERVICE"
-  ok "Cloudflare Tunnel configurado (opcional)."
+  sleep 2
+  if systemctl is-active --quiet "$TUNNEL_SERVICE"; then
+    ok "Cloudflare Tunnel ativo."
+  else
+    warn "Cloudflare Tunnel não iniciou; o CheckUser continua ativo por IP:porta."
+    systemctl status "$TUNNEL_SERVICE" --no-pager -l || true
+    tail -n 30 "$LOG" 2>/dev/null || true
+  fi
 }
 
 install_menu(){
@@ -171,7 +186,7 @@ PORT="2052"
 LOG="/var/log/${APP_NAME}-tunnel.log"
 GREEN='\033[1;32m'; RED='\033[1;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 link(){ grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1; }
-show(){ local l; l=$(link); echo; echo "CheckUser: $(systemctl is-active "$SERVICE" 2>/dev/null || true)"; echo "Porta: $PORT"; echo "Limites: $(systemctl cat "$SERVICE" 2>/dev/null | sed -n 's/.*--limits-db \([^ ]*\).*/\1/p' | tail -1)"; echo "DTunnel: ${l:-não disponível}"; echo "Void Pro+: ${l:-http://IP_DA_VPS:$PORT}/check?user={username}&uuid={uuid}&hwid={hwid}"; echo; }
+show(){ local l; l=$(link); echo; echo "CheckUser: $(systemctl is-active "$SERVICE" 2>/dev/null || true)"; echo "Tunnel: $(systemctl is-active "$TUNNEL_SERVICE" 2>/dev/null || true)"; echo "Porta: $PORT"; echo "Limites: $(systemctl cat "$SERVICE" 2>/dev/null | sed -n 's/.*--limits-db \([^ ]*\).*/\1/p' | tail -1)"; echo "DTunnel: ${l:-não disponível}"; echo "Void Pro+: ${l:-http://IP_DA_VPS:$PORT}/check?user={username}&uuid={uuid}&hwid={hwid}"; if [[ -z "$l" ]]; then echo "Diagnóstico: check opção 5 ou journalctl -u $TUNNEL_SERVICE"; fi; echo; }
 while true; do clear; echo "CHECKUSER DT + VOID PRO+"; echo "========================"; show; echo "[1] Iniciar"; echo "[2] Parar"; echo "[3] Reiniciar"; echo "[4] Status"; echo "[5] Logs"; echo "[6] Sair"; read -r -p 'Opção: ' op; case "$op" in 1) systemctl start "$SERVICE" "$TUNNEL_SERVICE" 2>/dev/null;; 2) systemctl stop "$TUNNEL_SERVICE" "$SERVICE" 2>/dev/null;; 3) systemctl restart "$SERVICE"; systemctl restart "$TUNNEL_SERVICE" 2>/dev/null || true;; 4) systemctl status "$SERVICE" "$TUNNEL_SERVICE" --no-pager;; 5) tail -n 80 "$LOG" 2>/dev/null;; 6) exit 0;; esac; read -r -p 'ENTER para continuar' _; done
 MENU_EOF
   chmod 0755 "$MENU"
