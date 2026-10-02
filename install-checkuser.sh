@@ -185,7 +185,14 @@ TUNNEL_SERVICE="${APP_NAME}-tunnel.service"
 PORT="2052"
 LOG="/var/log/${APP_NAME}-tunnel.log"
 GREEN=$'\033[1;32m'; RED=$'\033[1;31m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;36m'; WHITE=$'\033[1;37m'; GRAY=$'\033[0;90m'; NC=$'\033[0m'
-link(){ grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tail -1; }
+link(){
+  local l
+  l=$(grep -Eo 'https://[^[:space:]]+\.trycloudflare\.com' "$LOG" 2>/dev/null | tr -d '"' | tail -1 || true)
+  if [[ -z "$l" ]]; then
+    l=$(journalctl -u "$TUNNEL_SERVICE" --no-pager -n 100 -o cat 2>/dev/null | grep -Eo 'https://[^[:space:]]+\.trycloudflare\.com' | tr -d '"' | tail -1 || true)
+  fi
+  printf '%s' "$l"
+}
 line(){ printf '%s%-22s%s %s\n' "$CYAN" "$1" "$NC" "$2"; }
 box(){ printf '%s╔══════════════════════════════════════════════════════════╗%s\n' "$CYAN" "$NC"; }
 endbox(){ printf '%s╚══════════════════════════════════════════════════════════╝%s\n' "$CYAN" "$NC"; }
@@ -194,7 +201,7 @@ show(){
   clear; echo; box; printf '%s║%s             CHECKUSER CONTROL PANEL              %s║%s\n' "$CYAN" "$NC" "$CYAN" "$NC"; printf '%s║%s              DTunnel + Void Pro+                 %s║%s\n' "$CYAN" "$GRAY" "$CYAN" "$NC"; printf '%s╠══════════════════════════════════════════════════════════╣%s\n' "$CYAN" "$NC"; line "CheckUser" "${cs:-unknown}"; line "Cloudflare" "${ts:-unknown}"; line "Porta" "$PORT"; line "Limites" "${db:-não identificado}"; endbox
   echo; printf '%sLINK CLOUDFLARE / DTUNNEL%s\n' "$WHITE" "$NC"; printf '%s%s%s\n' "$GREEN" "${l:-Link ainda não gerado}" "$NC"; echo; printf '%sURL PARA VOID PRO+%s\n' "$WHITE" "$NC"; printf '%s%s/check?user={username}&uuid={uuid}&hwid={hwid}%s\n' "$GREEN" "${l:-http://IP_DA_VPS:$PORT}" "$NC"; [[ -z "$l" ]] && printf '%sDiagnóstico: opção 5 ou journalctl -u %s%s\n' "$YELLOW" "$TUNNEL_SERVICE" "$NC"; echo;
 }
-while true; do show; box; echo "  [1] Iniciar serviços"; echo "  [2] Parar serviços"; echo "  [3] Reiniciar e gerar link"; echo "  [4] Status detalhado"; echo "  [5] Ver logs do Cloudflare"; echo "  [6] Atualizar tela/links"; echo "  [7] Remover CheckUser + Tunnel"; echo "  [0] Sair"; endbox; echo; read -r -p 'Opção: ' op; case "$op" in 1) systemctl start "$SERVICE"; systemctl start "$TUNNEL_SERVICE" 2>/dev/null || true;; 2) systemctl stop "$TUNNEL_SERVICE" "$SERVICE" 2>/dev/null;; 3) : > "$LOG"; systemctl restart "$SERVICE"; systemctl restart "$TUNNEL_SERVICE" 2>/dev/null || true; sleep 4;; 4) systemctl status "$SERVICE" "$TUNNEL_SERVICE" --no-pager -l;; 5) clear; tail -n 100 "$LOG" 2>/dev/null || true;; 6) :;; 7) echo; read -r -p 'Remover somente este CheckUser e Tunnel? (s/N): ' confirm; if [[ "$confirm" =~ ^[sS]$ ]]; then systemctl disable --now "$TUNNEL_SERVICE" "$SERVICE" 2>/dev/null || true; rm -f "/etc/systemd/system/$TUNNEL_SERVICE" "/etc/systemd/system/$SERVICE" "$MENU" "$LOG"; rm -rf /usr/local/lib/$APP_NAME; systemctl daemon-reload; echo "Removido. /root/usuarios.db e SSHPlus foram preservados."; exit 0; fi;; 0) clear; exit 0;; esac; [[ "$op" != 6 ]] && read -r -p 'ENTER para continuar' _; done
+while true; do show; box; echo "  [1] Iniciar serviços"; echo "  [2] Parar serviços"; echo "  [3] Reiniciar e gerar link"; echo "  [4] Status detalhado"; echo "  [5] Ver logs do Cloudflare"; echo "  [6] Atualizar tela/links"; echo "  [7] Remover CheckUser + Tunnel"; echo "  [0] Sair"; endbox; echo; read -r -p 'Opção: ' op; case "$op" in 1) systemctl start "$SERVICE"; systemctl start "$TUNNEL_SERVICE" 2>/dev/null || true;; 2) systemctl stop "$TUNNEL_SERVICE" "$SERVICE" 2>/dev/null;; 3) : > "$LOG"; systemctl restart "$SERVICE"; systemctl restart "$TUNNEL_SERVICE" 2>/dev/null || true; for _ in {1..10}; do [[ -n "$(link)" ]] && break; sleep 2; done;; 4) systemctl status "$SERVICE" "$TUNNEL_SERVICE" --no-pager -l;; 5) clear; echo '== arquivo de log =='; tail -n 100 "$LOG" 2>/dev/null || true; echo; echo '== journalctl =='; journalctl -u "$TUNNEL_SERVICE" --no-pager -n 100 -o cat 2>/dev/null || true;; 6) :;; 7) echo; read -r -p 'Remover somente este CheckUser e Tunnel? (s/N): ' confirm; if [[ "$confirm" =~ ^[sS]$ ]]; then systemctl disable --now "$TUNNEL_SERVICE" "$SERVICE" 2>/dev/null || true; rm -f "/etc/systemd/system/$TUNNEL_SERVICE" "/etc/systemd/system/$SERVICE" "$MENU" "$LOG"; rm -rf /usr/local/lib/$APP_NAME; systemctl daemon-reload; echo "Removido. /root/usuarios.db e SSHPlus foram preservados."; exit 0; fi;; 0) clear; exit 0;; esac; [[ "$op" != 6 ]] && read -r -p 'ENTER para continuar' _; done
 MENU_EOF
   chmod 0755 "$MENU"
 }
